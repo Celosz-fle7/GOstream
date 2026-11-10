@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Left-to-right dark vignette to keep Hero Text readable -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#EE0B0D14"
+                android:centerColor="#BB0B0D14"
+                android:endColor="#330B0D14"
+                android:type="linear" />
+        </shape>
+    </item>
+    <!-- Top-to-bottom dark gradient to anchor the shelf items at bottom -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#660B0D14"
+                android:centerColor="#AA0B0D14"
+                android:endColor="#FF0B0D14"
+                android:type="linear" />
+        </shape>
+    </item>
+</layer-list>
