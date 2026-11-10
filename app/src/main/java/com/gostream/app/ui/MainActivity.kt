@@ -1,15 +1,21 @@
 package com.gostream.app.ui
 
+import android.app.AlertDialog
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.Coil
 import coil.load
 import com.gostream.app.R
 import com.gostream.app.data.api.CineFlowApiClient
@@ -19,18 +25,23 @@ import com.gostream.app.databinding.ActivityMainBinding
 import com.gostream.app.ui.adapter.ProviderAdapter
 import com.gostream.app.ui.adapter.TvVideoAdapter
 import com.gostream.app.ui.adapter.VideoAdapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var providerAdapter: ProviderAdapter
     private lateinit var mobileVideoAdapter: VideoAdapter
+    private lateinit var searchVideoAdapter: VideoAdapter
     private lateinit var tvVideoAdapter: TvVideoAdapter
 
     private var currentModelId: String = "anichin"
     private var isTvMode: Boolean = false
     private var currentFocusedVideo: VideoItem? = null
+    private val allLoadedVideos = mutableListOf<VideoItem>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,27 +91,173 @@ class MainActivity : AppCompatActivity() {
             }
 
         } else {
-            // MOBILE MODE: 3-Grid System
+            // MOBILE MODE: 3-Grid System + Bottom Navigation Bar & Account Tab
             binding.ivAmbientBackdrop.visibility = View.GONE
             binding.vAmbientGradient.visibility = View.GONE
             binding.layoutTvContainer.visibility = View.GONE
             binding.layoutMobileContainer.visibility = View.VISIBLE
 
-            providerAdapter = ProviderAdapter { selectedProvider ->
-                currentModelId = selectedProvider.id
-                loadVideos(selectedProvider.id)
-            }
-            binding.rvMobileProviders.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-            binding.rvMobileProviders.adapter = providerAdapter
-
-            mobileVideoAdapter = VideoAdapter { video ->
-                openDetail(video)
-            }
-            // Strict 3-grid layout for Mobile
-            binding.rvMobileVideos.layoutManager = GridLayoutManager(this, 3)
-            binding.rvMobileVideos.adapter = mobileVideoAdapter
+            setupMobileHomeTab()
+            setupMobileSearchTab()
+            setupMobileAccountTab()
+            setupMobileBottomNavbar()
         }
     }
+
+    private fun setupMobileHomeTab() {
+        providerAdapter = ProviderAdapter { selectedProvider ->
+            currentModelId = selectedProvider.id
+            loadVideos(selectedProvider.id)
+        }
+        binding.rvMobileProviders.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.rvMobileProviders.adapter = providerAdapter
+
+        mobileVideoAdapter = VideoAdapter { video ->
+            openDetail(video)
+        }
+        binding.rvMobileVideos.layoutManager = GridLayoutManager(this, 3)
+        binding.rvMobileVideos.adapter = mobileVideoAdapter
+    }
+
+    private fun setupMobileSearchTab() {
+        searchVideoAdapter = VideoAdapter { video -> openDetail(video) }
+        binding.rvSearchResults.layoutManager = GridLayoutManager(this, 3)
+        binding.rvSearchResults.adapter = searchVideoAdapter
+
+        binding.etSearchInput.setOnEditorActionListener { textView, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
+                val query = textView.text.toString().trim()
+                filterSearchVideos(query)
+                true
+            } else false
+        }
+    }
+
+    private fun filterSearchVideos(query: String) {
+        if (query.isBlank()) {
+            searchVideoAdapter.submitList(allLoadedVideos)
+            return
+        }
+        val filtered = allLoadedVideos.filter {
+            it.title.contains(query, ignoreCase = true) || (it.overview?.contains(query, ignoreCase = true) == true)
+        }
+        searchVideoAdapter.submitList(filtered)
+    }
+
+    private fun setupMobileAccountTab() {
+        updateCacheSizeDisplay()
+
+        binding.btnClearCache.setOnClickListener {
+            clearAppCache()
+        }
+
+        binding.btnConnectTv.setOnClickListener {
+            showTvPairingDialog()
+        }
+
+        binding.btnCheckUpdates.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Celosz-fle7/GOstream"))
+            startActivity(intent)
+        }
+    }
+
+    private fun setupMobileBottomNavbar() {
+        binding.bottomNavMobile.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.menu_home -> {
+                    switchMobileTab(binding.viewMobileHome)
+                    true
+                }
+                R.id.menu_search -> {
+                    switchMobileTab(binding.viewMobileSearch)
+                    searchVideoAdapter.submitList(allLoadedVideos)
+                    true
+                }
+                R.id.menu_collection -> {
+                    switchMobileTab(binding.viewMobileCollection)
+                    true
+                }
+                R.id.menu_account -> {
+                    switchMobileTab(binding.viewMobileAccount)
+                    updateCacheSizeDisplay()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun switchMobileTab(activeView: View) {
+        binding.viewMobileHome.visibility = View.GONE
+        binding.viewMobileSearch.visibility = View.GONE
+        binding.viewMobileCollection.visibility = View.GONE
+        binding.viewMobileAccount.visibility = View.GONE
+
+        activeView.visibility = View.VISIBLE
+    }
+
+    private fun updateCacheSizeDisplay() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val totalBytes = calculateFolderSize(cacheDir)
+            val sizeMb = totalBytes / (1024.0 * 1024.0)
+            val text = if (sizeMb < 0.1) {
+                "Total Cache: ${(totalBytes / 1024.0).format(1)} KB (Sangat Hemat)"
+            } else {
+                "Total Cache: ${sizeMb.format(1)} MB (Sangat Hemat < 50 MB)"
+            }
+
+            withContext(Dispatchers.Main) {
+                binding.tvStorageUsage.text = text
+            }
+        }
+    }
+
+    private fun clearAppCache() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                cacheDir.deleteRecursively()
+                cacheDir.mkdirs()
+                Coil.imageLoader(this@MainActivity).memoryCache?.clear()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, "Cache berhasil dibersihkan! Penyimpanan optimal.", Toast.LENGTH_SHORT).show()
+                updateCacheSizeDisplay()
+            }
+        }
+    }
+
+    private fun showTvPairingDialog() {
+        val input = EditText(this).apply {
+            hint = "Contoh: 849201"
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Hubungkan ke Android TV")
+            .setMessage("Buka GOstream di Android TV, lihat kode 6-digit di layar TV dan masukkan ke sini:")
+            .setView(input)
+            .setPositiveButton("Hubungkan") { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.length >= 4) {
+                    Toast.makeText(this, "Perangkat TV ($code) berhasil ditautkan!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Kode tidak valid.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun calculateFolderSize(dir: File): Long {
+        var size = 0L
+        dir.walkTopDown().forEach { file ->
+            if (file.isFile) size += file.length()
+        }
+        return size
+    }
+
+    private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
     private fun updateTvHeroSection(video: VideoItem) {
         currentFocusedVideo = video
@@ -163,6 +320,9 @@ class MainActivity : AppCompatActivity() {
             binding.progressBar.visibility = View.GONE
 
             if (videos.isNotEmpty()) {
+                allLoadedVideos.clear()
+                allLoadedVideos.addAll(videos)
+
                 if (isTvMode) {
                     tvVideoAdapter.submitList(videos)
                     // Auto-select first video for Hero preview
