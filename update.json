@@ -1,0 +1,7 @@
+{
+  "version_code": 3,
+  "version_name": "1.2.0",
+  "apk_url": "https://github.com/Celosz-fle7/GOstream/releases/download/latest/app-debug.apk",
+  "changelog": "• Fitur In-App Auto-Update OTA (Sekali Klik)\n• Menu Akun & Bottom Navbar HP (Beranda, Cari, Koleksi, Akun)\n• Tampilan Android TV 10-Foot Ambient Backdrop ala YouTube TV/Netflix\n• Zero-Disk Storage Buffer Media3 (< 50 MB)",
+  "force_update": false
+}

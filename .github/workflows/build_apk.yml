@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build GOstream APK
@@ -37,3 +40,19 @@ jobs:
           name: GOstream-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      - name: Publish In-App OTA Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: GOstream In-App OTA Release
+          body: |
+            ## Pembaruan Otomatis GOstream (In-App OTA)
+            - Fitur In-App Auto-Update Sekali Klik
+            - Tampilan Android TV 10-Foot Ambient Backdrop
+            - Bottom Navigation Bar Mobile & Menu Akun Lengkap
+            - Zero-Disk Storage Buffering (< 50MB)
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -25,6 +25,7 @@ import com.gostream.app.databinding.ActivityMainBinding
 import com.gostream.app.ui.adapter.ProviderAdapter
 import com.gostream.app.ui.adapter.TvVideoAdapter
 import com.gostream.app.ui.adapter.VideoAdapter
+import com.gostream.app.util.AppUpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,6 +52,9 @@ class MainActivity : AppCompatActivity() {
         detectDeviceMode()
         setupViews()
         loadProviders()
+
+        // In-App Auto-Update check on launch
+        AppUpdateManager.checkForUpdates(this, isManualCheck = false)
     }
 
     private fun detectDeviceMode() {
@@ -156,8 +160,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnCheckUpdates.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Celosz-fle7/GOstream"))
-            startActivity(intent)
+            AppUpdateManager.checkForUpdates(this, isManualCheck = true)
         }
     }
 
