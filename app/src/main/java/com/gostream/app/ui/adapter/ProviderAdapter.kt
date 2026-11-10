@@ -8,18 +8,19 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.gostream.app.R
-import com.gostream.app.data.model.ProviderItem
+import com.gostream.app.data.moviebox.MovieBoxCategory
 
 class ProviderAdapter(
-    private val onProviderSelected: (ProviderItem) -> Unit
+    private val onCategorySelected: (MovieBoxCategory) -> Unit
 ) : RecyclerView.Adapter<ProviderAdapter.ViewHolder>() {
 
-    private val items = mutableListOf<ProviderItem>()
+    private val items = mutableListOf<MovieBoxCategory>()
     private var selectedIndex = 0
 
-    fun submitList(newItems: List<ProviderItem>) {
+    fun submitList(newItems: List<MovieBoxCategory>) {
         items.clear()
         items.addAll(newItems)
+        selectedIndex = 0
         notifyDataSetChanged()
     }
 
@@ -38,7 +39,7 @@ class ProviderAdapter(
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvName: TextView = itemView.findViewById(R.id.tvChipName)
 
-        fun bind(item: ProviderItem, isSelected: Boolean) {
+        fun bind(item: MovieBoxCategory, isSelected: Boolean) {
             tvName.text = item.name
 
             if (isSelected) {
@@ -54,7 +55,7 @@ class ProviderAdapter(
                 selectedIndex = bindingAdapterPosition
                 notifyItemChanged(prev)
                 notifyItemChanged(selectedIndex)
-                onProviderSelected(item)
+                onCategorySelected(item)
             }
         }
     }

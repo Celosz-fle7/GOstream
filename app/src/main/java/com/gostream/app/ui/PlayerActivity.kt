@@ -1,7 +1,6 @@
 package com.gostream.app.ui
 
 import android.content.pm.ActivityInfo
-import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
@@ -15,9 +14,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.gostream.app.R
-import com.gostream.app.data.api.CineFlowApiClient
+import com.gostream.app.data.db.GOStreamDatabase
+import com.gostream.app.data.moviebox.MovieBoxClient
 import com.gostream.app.databinding.ActivityPlayerBinding
 import com.gostream.app.player.MediaEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @UnstableApi
@@ -27,10 +28,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var mediaEngine: MediaEngine
     private var exoPlayer: ExoPlayer? = null
 
-    private var modelId: String = ""
-    private var episodeId: String = ""
     private var videoId: String = ""
+    private var episodeNumber: Int = 1
     private var videoTitle: String = ""
+    private var posterUrl: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,10 +43,10 @@ class PlayerActivity : AppCompatActivity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        modelId = intent.getStringExtra("extra_model_id") ?: ""
-        episodeId = intent.getStringExtra("extra_episode_id") ?: ""
         videoId = intent.getStringExtra("extra_video_id") ?: ""
+        episodeNumber = intent.getIntExtra("extra_episode_num", 1)
         videoTitle = intent.getStringExtra("extra_title") ?: "GOstream Player"
+        posterUrl = intent.getStringExtra("extra_poster") ?: ""
 
         setupCustomControls()
         initPlayer()
@@ -69,7 +70,10 @@ class PlayerActivity : AppCompatActivity() {
                     when (playbackState) {
                         Player.STATE_BUFFERING -> binding.playerLoading.visibility = View.VISIBLE
                         Player.STATE_READY -> binding.playerLoading.visibility = View.GONE
-                        Player.STATE_ENDED -> binding.playerLoading.visibility = View.GONE
+                        Player.STATE_ENDED -> {
+                            binding.playerLoading.visibility = View.GONE
+                            saveCurrentProgress()
+                        }
                         Player.STATE_IDLE -> {}
                     }
                 }
@@ -89,7 +93,7 @@ class PlayerActivity : AppCompatActivity() {
         binding.tvPlayerError.visibility = View.GONE
 
         lifecycleScope.launch {
-            val source = CineFlowApiClient.getStreamSource(modelId, episodeId, videoId)
+            val source = MovieBoxClient.resolveStreamUrl(videoId, episodeNumber)
             if (source != null && !isFinishing) {
                 val mediaSource = mediaEngine.buildMediaSource(source)
                 exoPlayer?.setMediaSource(mediaSource)
@@ -98,7 +102,26 @@ class PlayerActivity : AppCompatActivity() {
             } else {
                 binding.playerLoading.visibility = View.GONE
                 binding.tvPlayerError.visibility = View.VISIBLE
-                binding.tvPlayerError.text = "Gagal mendapatkan tautan streaming dari gateway provider."
+                binding.tvPlayerError.text = "Tautan streaming tidak tersedia atau dalam antrean decoding."
+            }
+        }
+    }
+
+    private fun saveCurrentProgress() {
+        val player = exoPlayer ?: return
+        val currentPos = player.currentPosition
+        val duration = player.duration
+
+        if (videoId.isNotBlank() && currentPos > 5000) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                GOStreamDatabase.getInstance(this@PlayerActivity).saveProgress(
+                    subjectId = videoId,
+                    title = videoTitle.substringBefore(" - Episode"),
+                    posterUrl = posterUrl,
+                    episodeNumber = episodeNumber,
+                    positionMs = currentPos,
+                    durationMs = if (duration > 0) duration else 0
+                )
             }
         }
     }
@@ -146,9 +169,11 @@ class PlayerActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         exoPlayer?.pause()
+        saveCurrentProgress()
     }
 
     override fun onDestroy() {
+        saveCurrentProgress()
         super.onDestroy()
         exoPlayer?.release()
         exoPlayer = null
